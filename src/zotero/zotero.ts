@@ -3,40 +3,101 @@ import { Item } from "../types/zotero/Item.ts";
 import { PaperStore } from "../index.ts";
 import { Paper } from "../types/Papers.ts";
 import { Collection } from "../types/zotero/Collection.ts";
+import { downloadNextcloud } from "../downloadNextcloud.ts";
 
 export interface ZoteroTree {
-    collection?: Collection;
+    collection: Collection;
     childs?: ZoteroTree[];
     items: TreeItem[];
 }
 type TreeItem = { item: Item; childs: TreeItem[] };
 export const syncZotero = async () => {
-    const toplevelCollections = (
-        await callZoteroAPI<Collection[]>("/collections/top")
-    ).data;
-    const tree: ZoteroTree[] = [];
+    // const toplevelCollections = (
+    //     await callZoteroAPI<Collection[]>("/collections/top")
+    // ).data;
+    // const tree: ZoteroTree[] = [];
 
-    for (let i = 0; i < toplevelCollections.length; i++) {
-        const c = toplevelCollections[i];
-        tree.push(await populateCollection(c));
-    }
+    // for (let i = 0; i < toplevelCollections.length; i++) {
+    //     const c = toplevelCollections[i];
+    //     tree.push(await populateCollection(c));
+    // }
 
-    // const items = (await callZoteroAPI<Item[]>("items")).data;
-    // const papers: Record<string, Paper> = {};
-    // items.forEach((item) => {
-    //     if (item.data?.contentType?.includes("pdf")) {
-    //         papers[item.key] = {
-    //             key: item.key,
-    //             title: item.data.title,
-    //             zoteroModified: item.data.dateModified,
-    //             md5: item.data.md5,
-    //         };
-    //     } else {
-    //         console.log(item.data);
-    //     }
-    // });
-    PaperStore.set(tree);
+    // PaperStore.set(tree);
+
+    const tree = PaperStore.get();
+    const documents = getDocumentList(tree, "", "");
+    downloadNextcloud(documents);
     //downloadNextcloud();
+};
+export type Document = {
+    path: string;
+    name: string;
+    key: string;
+    keyPath: string;
+};
+const getDocumentList = (
+    trees: ZoteroTree[],
+    path: string,
+    keyPath: string
+): Document[] => {
+    const documents: Document[] = [];
+
+    trees.forEach((tree) => {
+        tree.items.forEach((item) => {
+            documents.push(
+                ...getDocumentListItem(
+                    item,
+                    path + "/" + tree.collection.data.name,
+                    keyPath + "/" + tree.collection.key
+                )
+            );
+        });
+
+        if (tree.childs) {
+            documents.push(
+                ...getDocumentList(
+                    tree.childs,
+                    path + "/" + tree.collection.data.name,
+                    keyPath + "/" + tree.collection.key
+                )
+            );
+        }
+    });
+
+    return documents;
+};
+const getDocumentListItem = (
+    item: TreeItem,
+    path: string,
+    keyPath: string
+): Document[] => {
+    const documents: Document[] = [];
+
+    if (item.item.data.contentType?.includes("pdf")) {
+        documents.push({
+            path: path + "/" + item.item.data.filename,
+            keyPath: keyPath + "/" + item.item.key,
+            key: item.item.key,
+            name: item.item.data.filename,
+        });
+    }
+    item.childs.forEach((child) => {
+        let newDocs = getDocumentListItem(
+            child,
+            path + "/" + item.item.data.title,
+            keyPath + "/" + item.item.key
+        );
+        if (newDocs.length <= 1)
+            newDocs = getDocumentListItem(
+                child,
+                path,
+                keyPath + "/" + item.item.key
+            );
+
+        documents.push(...newDocs);
+    });
+
+    return documents;
 };
 const limit = 30;
 const populateCollection = async (
