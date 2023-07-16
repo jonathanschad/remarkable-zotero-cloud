@@ -2,9 +2,11 @@ import express from "express";
 import morgan from "morgan";
 import cors from "cors";
 import dotenv from "dotenv";
-import { syncZotero } from "./zotero.ts";
+import { ZoteroTree, syncZotero } from "./zotero/zotero.ts";
 import { createClient } from "webdav";
 import { exit } from "process";
+import { Store } from "./Store.ts";
+import { Paper } from "./types/Papers.ts";
 
 dotenv.config();
 if (
@@ -22,6 +24,7 @@ export const webdav = createClient(process.env.WEBDAV_URL ?? "", {
     username: process.env.WEBDAV_USER,
     password: process.env.WEBDAV_PASSWORD,
 });
+export const PaperStore = new Store<ZoteroTree[]>("./data/papers.json");
 
 const app = express();
 const port = process.env.PORT || 3001;
